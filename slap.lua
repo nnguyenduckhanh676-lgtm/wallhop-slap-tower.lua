@@ -2,8 +2,34 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local TextChatService = game:GetService("TextChatService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
+
+-- TÊN TÀI KHOẢN CHỦ SỞ HỮU ĐƯỢC BẢO VỆ ABSOLUTE
+local OWNER_NAME = "kobtgihetaok"
+
+-- ==========================================
+-- HỆ THỐNG TỰ ĐỘNG CHAT KHI BẬT SCRIPT
+-- ==========================================
+task.spawn(function()
+	local chatMessage = "script by kobtgihetaok"
+	task.wait(0.5)
+	
+	pcall(function()
+		if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+			local textChannel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+			if textChannel then
+				textChannel:SendAsync(chatMessage)
+			end
+		else
+			local defaultChat = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+			if defaultChat and defaultChat:FindFirstChild("SayMessageRequest") then
+				defaultChat.SayMessageRequest:FireServer(chatMessage, "All")
+			end
+		end
+	end)
+end)
 
 -- Biến điều khiển
 local BringAllEnabled = false
@@ -14,7 +40,17 @@ local TrollTargetEnabled = false
 -- Biến cho Super Knockback & Anti Slap
 local SuperKnockbackEnabled = false
 local AntiSlapEnabled = false
-local KnockbackPower = 100000 -- Lực văng mặc định
+local KnockbackPower = 100000
+
+-- HÀM KIỂM TRA BẢO VỆ CHỦ SỞ HỮU (Chặn tác động vào kobtgihetaok)
+local function IsProtected(playerObj)
+	if not playerObj then return false end
+	local pName = string.lower(playerObj.Name)
+	if pName == string.lower(OWNER_NAME) then
+		return true
+	end
+	return false
+end
 
 local function FindPlayerModel(query)
 	if not query or query == "" then return nil end
@@ -25,7 +61,7 @@ local function FindPlayerModel(query)
 			local displayName = string.lower(player.DisplayName)
 			if string.find(name, query, 1, true) or string.find(displayName, query, 1, true) then
 				if player.Character and player.Character.Parent == workspace then
-					return player.Character
+					return player
 				end
 			end
 		end
@@ -87,7 +123,7 @@ MainTab:CreateToggle({
                
                if slapTool and slapTool:FindFirstChild("Event") then
                   for _, v in pairs(Players:GetPlayers()) do
-                     if v ~= LocalPlayer and v.Character then
+                     if v ~= LocalPlayer and v.Character and not IsProtected(v) then
                         slapTool.Event:FireServer("slash", v.Character, GetSlashVector())
                      end
                   end
@@ -99,7 +135,6 @@ MainTab:CreateToggle({
    end,
 })
 
--- NÚT FLING ALL PLAYER 1 LẦN (KHÔNG LẶP)
 MainTab:CreateButton({
    Name = "Fling All Players (Bấm 1 Lần)",
    Callback = function()
@@ -109,12 +144,12 @@ MainTab:CreateButton({
       
       if slapTool and slapTool:FindFirstChild("Event") then
          for _, v in pairs(Players:GetPlayers()) do
-            if v ~= LocalPlayer and v.Character then
+            if v ~= LocalPlayer and v.Character and not IsProtected(v) then
                local flingVector = Vector3.new(math.random(-999999, 999999), 999999, math.random(-999999, 999999))
                slapTool.Event:FireServer("slash", v.Character, flingVector)
             end
          end
-         Rayfield:Notify({ Title = "Fling All", Content = "Đã Fling tất cả người chơi 1 lần!", Duration = 2 })
+         Rayfield:Notify({ Title = "Fling All", Content = "Đã Fling tất cả (Trừ kobtgihetaok)!", Duration = 2 })
       else
          Rayfield:Notify({ Title = "Lỗi", Content = "Không tìm thấy Tool Slap!", Duration = 2 })
       end
@@ -147,15 +182,15 @@ TrollTab:CreateToggle({
       if TrollTargetEnabled then
          task.spawn(function()
             while TrollTargetEnabled do
-               local targetCharacter = FindPlayerModel(TargetInputName)
+               local targetPlayer = FindPlayerModel(TargetInputName)
                
-               if targetCharacter then
+               if targetPlayer and targetPlayer.Character and not IsProtected(targetPlayer) then
                   local backpack = LocalPlayer:FindFirstChild("Backpack")
                   local character = LocalPlayer.Character
                   local slapTool = (backpack and backpack:FindFirstChild("Slap")) or (character and character:FindFirstChild("Slap"))
                   
                   if slapTool and slapTool:FindFirstChild("Event") then
-                     slapTool.Event:FireServer("slash", targetCharacter, GetSlashVector())
+                     slapTool.Event:FireServer("slash", targetPlayer.Character, GetSlashVector())
                   end
                end
                task.wait(0.05)
@@ -167,7 +202,6 @@ TrollTab:CreateToggle({
 
 TrollTab:CreateSection("Custom Knockback & Anti Slap")
 
--- Ô NHẬP SỐ LỰC VĂNG (INPUT)
 TrollTab:CreateInput({
    Name = "Nhập số lực văng (Knockback Power)",
    PlaceholderText = "Mặc định: 100000",
@@ -180,7 +214,6 @@ TrollTab:CreateInput({
    end,
 })
 
--- TOGGLE SUPER KNOCKBACK ON HIT
 TrollTab:CreateToggle({
    Name = "Super Knockback On Hit (Đánh văng xa)",
    CurrentValue = false,
@@ -190,7 +223,6 @@ TrollTab:CreateToggle({
    end,
 })
 
--- TOGGLE ANTI SLAP (CHẠM VÀO LÀ FLING)
 TrollTab:CreateToggle({
    Name = "Anti Slap (Lại gần/Chạm là Fling cực mạnh)",
    CurrentValue = false,
@@ -200,7 +232,7 @@ TrollTab:CreateToggle({
    end,
 })
 
--- Vòng lặp kiểm tra va chạm / khoảng cách cho Anti Slap
+-- Anti Slap Task (Đã bọc kiểm tra IsProtected)
 task.spawn(function()
    while true do
       if AntiSlapEnabled then
@@ -213,11 +245,10 @@ task.spawn(function()
             
             if slapTool and slapTool:FindFirstChild("Event") then
                for _, v in pairs(Players:GetPlayers()) do
-                  if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+                  if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and not IsProtected(v) then
                      local targetRoot = v.Character.HumanoidRootPart
                      local dist = (targetRoot.Position - myRoot.Position).Magnitude
                      
-                     -- Khoảng cách chạm / xuyên qua nhân vật (dưới 6 studs)
                      if dist <= 6 then
                         local superFlingVector = Vector3.new(math.random(-999999, 999999), 999999, math.random(-999999, 999999))
                         slapTool.Event:FireServer("slash", v.Character, superFlingVector)
@@ -227,11 +258,11 @@ task.spawn(function()
             end
          end
       end
-      task.wait(0.03) -- Quét liên tục để phản hồi Anti Slap cực nhanh
+      task.wait(0.03)
    end
 end)
 
--- Vòng lặp cho Super Knockback On Hit
+-- Super Knockback Task (Đã bọc kiểm tra IsProtected)
 task.spawn(function()
    while true do
       if SuperKnockbackEnabled then
@@ -250,7 +281,7 @@ task.spawn(function()
                local myRoot = character and character:FindFirstChild("HumanoidRootPart")
                if myRoot then
                   for _, v in pairs(Players:GetPlayers()) do
-                     if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+                     if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and not IsProtected(v) then
                         local dist = (v.Character.HumanoidRootPart.Position - myRoot.Position).Magnitude
                         if dist <= 15 then
                            local customVector = Vector3.new(
@@ -279,11 +310,12 @@ end)
 local MiscTab = Window:CreateTab("Misc", 4483362458)
 MiscTab:CreateSection("Script Credits")
 MiscTab:CreateLabel("Script Creator: by kobtgihetaok")
+MiscTab:CreateLabel("Protected Owner: kobtgihetaok (Immune)")
 
 -- Thông báo tải xong
 Rayfield:Notify({
    Title = "wallhop slap tower",
-   Content = "Đã cập nhật Fling All (1 lần), Anti Slap và Nhập số lực văng!",
+   Content = "Đã kích hoạt bảo vệ chủ sở hữu kobtgihetaok!",
    Duration = 3,
    Image = 4483362458,
 })
